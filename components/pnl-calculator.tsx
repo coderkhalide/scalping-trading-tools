@@ -25,6 +25,8 @@ export function PnLCalculator({
 }: PnLCalculatorProps) {
   const [copiedBreakeven, setCopiedBreakeven] = useState(false)
 
+  const [open, setOpen] = useState(true)
+
   const entry = Number.parseFloat(entryPrice) || 0
   const exit = Number.parseFloat(exitPrice) || 0
   const size = Number.parseFloat(positionSize) || 0
@@ -51,66 +53,74 @@ export function PnLCalculator({
   if (exit === 0) {
     return (
       <Card className="border-2 border-blue-200 bg-blue-50">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3"
+          onClick={() => setOpen(!open)}
+        >
           <CardTitle className="flex items-center gap-2 text-sm">
             <Minus className="h-4 w-4 text-blue-600" />
             Trade Analysis (Running)
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {/* Fee Impact */}
-          <div className="grid grid-cols-3 gap-3 pt-3">
-            {/* let's have breakeven here */}
-            <div className="text-center cursor-pointer" title="Click to copy breakeven price"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(breakevenPrice.toFixed(entry < 1 ? 6 : 2))
-                  setCopiedBreakeven(true)
-                  setTimeout(() => setCopiedBreakeven(false), 1000)
-                } catch (err) {
-                  console.error("Failed to copy:", err)
-                }
-              }}
-            >
-              <div className="font-semibold text-orange-600">{breakevenPrice.toFixed(entry < 1 ? 6 : 2)}</div>
-              <div className="text-xs text-muted-foreground">Breakeven Price</div>
-            </div>
-            <div className="text-center">
-              <div className="font-semibold text-orange-600">-{feeAmount.toFixed(2)}</div>
-              <div className="text-xs text-muted-foreground">Fee Amount</div>
-            </div>
-            <div className="text-center">
-              <div className="font-semibold text-red-600">-{feeR.toFixed(2)}R</div>
-              <div className="text-xs text-muted-foreground">Fee Cost in R</div>
-            </div>
+        {!open && (
+          <div className="mb-3">
           </div>
+        )}
+        {open && (
+          <CardContent className="space-y-3">
+            {/* Fee Impact */}
+            <div className="grid grid-cols-3 gap-3 pt-3">
+              {/* let's have breakeven here */}
+              <div className="text-center cursor-pointer" title="Click to copy breakeven price"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(breakevenPrice.toFixed(entry < 1 ? 6 : 2))
+                    setCopiedBreakeven(true)
+                    setTimeout(() => setCopiedBreakeven(false), 1000)
+                  } catch (err) {
+                    console.error("Failed to copy:", err)
+                  }
+                }}
+              >
+                <div className="font-semibold text-orange-600">{breakevenPrice.toFixed(entry < 1 ? 6 : 2)}</div>
+                <div className="text-xs text-muted-foreground">Breakeven Price</div>
+              </div>
+              <div className="text-center">
+                <div className="font-semibold text-orange-600">-{feeAmount.toFixed(2)}</div>
+                <div className="text-xs text-muted-foreground">Fee Amount</div>
+              </div>
+              <div className="text-center">
+                <div className="font-semibold text-red-600">-{feeR.toFixed(2)}R</div>
+                <div className="text-xs text-muted-foreground">Fee Cost in R</div>
+              </div>
+            </div>
 
-          {/* Trade Details */}
-          <div className="text-xs space-y-1 pt-2 border-t">
-            <div className="flex justify-between">
-              <span>Entry:</span>
-              <span className="font-mono">{entry.toFixed(entry < 1 ? 6 : 2)}</span>
+            {/* Trade Details */}
+            <div className="text-xs space-y-1 pt-2 border-t">
+              <div className="flex justify-between">
+                <span>Entry:</span>
+                <span className="font-mono">{entry.toFixed(entry < 1 ? 6 : 2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Breakeven:</span>
+                <span className="font-mono">{breakevenPrice.toFixed(entry < 1 ? 6 : 2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Size:</span>
+                <span className="font-mono">{size}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Risk Amount:</span>
+                <span className="font-mono">{riskAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Direction:</span>
+                <Badge variant="outline" className="h-4 text-xs">
+                  {direction}
+                </Badge>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span>Breakeven:</span>
-              <span className="font-mono">{breakevenPrice.toFixed(entry < 1 ? 6 : 2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Size:</span>
-              <span className="font-mono">{size}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Risk Amount:</span>
-              <span className="font-mono">{riskAmount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Direction:</span>
-              <Badge variant="outline" className="h-4 text-xs">
-                {direction}
-              </Badge>
-            </div>
-          </div>
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
     )
   }
