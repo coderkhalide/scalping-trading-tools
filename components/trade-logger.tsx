@@ -1,9 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { FileText } from "lucide-react"
+import { FileText, Zap, Calculator } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { TradingSystem, ScoreData, AssetConfig, TradeEntry, RiskSettings } from "@/types/trading-system"
 import { getLetterGrade } from "@/utils/scoring"
 import { AssetManager } from "./asset-manager"
@@ -33,7 +36,8 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
   })
 
   const [editingTrade, setEditingTrade] = useState<TradeEntry | null>(null)
-
+  const [isManualGrading, setIsManualGrading] = useState(false)
+  const [manualGrade, setManualGrade] = useState("A")
   // Asset configuration
   const [assets, setAssets] = useState<AssetConfig[]>([
     { asset: "BTC", fee: 16, increment: 0.01, category: "crypto" },
@@ -72,6 +76,9 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
 
       const savedTrades = localStorage.getItem("tradingGraderTrades")
       if (savedTrades) setTradeHistory(JSON.parse(savedTrades))
+
+      const savedManualGrading = localStorage.getItem("tradingGraderManualGrading")
+      if (savedManualGrading) setIsManualGrading(JSON.parse(savedManualGrading))
     } catch (error) {
       console.error("Failed to load data:", error)
     }
@@ -90,7 +97,55 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
     localStorage.setItem("tradingGraderTrades", JSON.stringify(tradeHistory))
   }, [tradeHistory])
 
-  const letterGrade = getLetterGrade(scoreData.totalScore)
+  // const letterGrade = getLetterGrade(scoreData.totalScore)
+  useEffect(() => {
+    localStorage.setItem("tradingGraderManualGrading", JSON.stringify(isManualGrading))
+  }, [isManualGrading])
+
+  // Create manual score data based on selected grade
+  const createManualScoreData = (grade: string): ScoreData => {
+    const gradeToScore: Record<string, number> = {
+      "A++++": 150,
+      "A+++": 135,
+      "A++": 115,
+      "A+": 100,
+      A: 90,
+      B: 80,
+      C: 70,
+      D: 60,
+      F: 40,
+    }
+
+    const totalScore = gradeToScore[grade] || 80
+    const baseScore = Math.min(totalScore, 100)
+    const bonusPoints = Math.max(0, totalScore - 100)
+
+    return {
+      baseScore,
+      bonusPoints,
+      totalScore,
+      factorBreakdown: [
+        {
+          groupId: "manual",
+          groupName: "Manual Grade Selection",
+          groupScore: baseScore,
+          maxGroupScore: 100,
+          factors: [
+            {
+              factorId: "manual-grade",
+              factorName: `Manual ${grade} Grade`,
+              contribution: baseScore,
+              individualGrade: baseScore,
+            },
+          ],
+        },
+      ],
+    }
+  }
+
+  // Use either factor-based or manual score data
+  const currentScoreData = isManualGrading ? createManualScoreData(manualGrade) : scoreData
+  const letterGrade = getLetterGrade(currentScoreData.totalScore)
 
   const calculateRisk = () => {
     const entry = Number.parseFloat(tradeDetails.entryPrice) || 0
@@ -162,8 +217,8 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
   }
 
   const saveTrade = (isDraft = false) => {
-    if (scoreData.totalScore === 0) {
-      alert("Cannot save trade with 0 score. Please configure your factors first.")
+    if (currentScoreData.totalScore === 0) {
+      alert("Cannot save trade with 0 score. Please configure your factors or select a manual grade first.")
       return
     }
 
@@ -182,15 +237,15 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
       exitPrice: tradeDetails.exitPrice,
       positionSize: tradeDetails.positionSize,
       notes: tradeDetails.notes,
-      scoreData: { ...scoreData },
-      systemName: system.name,
+      scoreData: { ...currentScoreData },
+      systemName: isManualGrading ? `${system.name} (Manual ${manualGrade})` : system.name,
       isDraft,
       riskAmount: risk,
       feeAmount: fee,
       pnl: tradeDetails.exitPrice ? pnl : undefined,
       savedSystemState: {
-        factorGroups: JSON.parse(JSON.stringify(system.factorGroups)),
-        bonusRules: JSON.parse(JSON.stringify(system.bonusRules)),
+        factorGroups: isManualGrading ? [] : JSON.parse(JSON.stringify(system.factorGroups)),
+        bonusRules: isManualGrading ? [] : JSON.parse(JSON.stringify(system.bonusRules)),
       },
       riskAnalysis,
     }
@@ -228,9 +283,19 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
       notes: trade.notes,
     })
 
-    // Restore the saved system state (factor grades)
-    if (trade.savedSystemState && onRestoreSystemState) {
-      onRestoreSystemState(trade.savedSystemState.factorGroups, trade.savedSystemState.bonusRules)
+    // Check if this was a manual grade trade
+    if (trade.systemName.includes("Manual")) {
+      setIsManualGrading(true)
+      const gradeMatch = trade.systemName.match(/Manual ([A-F][+]*)/)
+      if (gradeMatch) {
+        setManualGrade(gradeMatch[1])
+      }
+    } else {
+      setIsManualGrading(false)
+      // Restore the saved system state (factor grades)
+      if (trade.savedSystemState && onRestoreSystemState) {
+        onRestoreSystemState(trade.savedSystemState.factorGroups, trade.savedSystemState.bonusRules)
+      }
     }
   }
 
@@ -247,6 +312,7 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
         positionSize: "",
         notes: "",
       })
+      setIsManualGrading(false)
     }
   }
 
@@ -267,9 +333,10 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
         const exit = Number.parseFloat(trade.exitPrice) || 0
         const size = Number.parseFloat(trade.positionSize) || 0
         const grossPnL = trade.direction === "LONG" ? (exit - entry) * size : (entry - exit) * size
-        const grossR = trade.riskAmount > 0 ? grossPnL / trade.riskAmount : 0
-        const netR = trade.riskAmount > 0 ? (grossPnL - trade.feeAmount) / trade.riskAmount : 0
-        const feeR = trade.riskAmount > 0 ? trade.feeAmount / trade.riskAmount : 0
+        const totalPlannedRisk = trade.riskAmount + trade.feeAmount
+        const grossR = totalPlannedRisk > 0 ? grossPnL / totalPlannedRisk : 0
+        const netR = totalPlannedRisk > 0 ? (grossPnL - trade.feeAmount) / totalPlannedRisk : 0
+        const feeR = totalPlannedRisk > 0 ? trade.feeAmount / totalPlannedRisk : 0
 
         return [
           new Date(trade.timestamp).toLocaleDateString(),
@@ -344,6 +411,7 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
     document.body.removeChild(link)
   }
 
+
   // Calculate current values for components
   const risk = calculateRisk()
   const fee = calculateFee()
@@ -362,7 +430,7 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">Editing Draft</Badge>
                   <span className="text-xs text-orange-600">
-                    (Factor grades restored from {new Date(editingTrade.timestamp).toLocaleDateString()})
+                    (Restored from {new Date(editingTrade.timestamp).toLocaleDateString()})
                   </span>
                 </div>
               )}
@@ -380,6 +448,43 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Manual Grading Toggle */}
+          <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center gap-3">
+              <Switch checked={isManualGrading} onCheckedChange={setIsManualGrading} id="manual-grading" />
+              <Label htmlFor="manual-grading" className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-yellow-600" />
+                <span className="font-medium">Quick Grade Mode</span>
+              </Label>
+              <span className="text-sm text-muted-foreground">Skip factor scoring and select grade directly</span>
+            </div>
+
+            {isManualGrading && (
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">Grade:</Label>
+                <Select value={manualGrade} onValueChange={setManualGrade}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="A++++">A++++</SelectItem>
+                    <SelectItem value="A+++">A+++</SelectItem>
+                    <SelectItem value="A++">A++</SelectItem>
+                    <SelectItem value="A+">A+</SelectItem>
+                    <SelectItem value="A">A</SelectItem>
+                    <SelectItem value="B">B</SelectItem>
+                    <SelectItem value="C">C</SelectItem>
+                    <SelectItem value="D">D</SelectItem>
+                    <SelectItem value="F">F</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-1 ml-2">
+                  <Calculator className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-sm font-mono">{currentScoreData.totalScore} pts</span>
+                </div>
+              </div>
+            )}
+          </div>
           <TradeForm
             tradeDetails={tradeDetails}
             onUpdateTrade={(updates) => setTradeDetails((prev) => ({ ...prev, ...updates }))}
@@ -406,7 +511,7 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
             positionSize={tradeDetails.positionSize}
             assets={assets}
             riskSettings={riskSettings}
-            scoreData={scoreData}
+            scoreData={currentScoreData}
           />
 
           <TradeActions
@@ -414,12 +519,12 @@ export function TradeLogger({ system, scoreData, onRestoreSystemState }: TradeLo
             onSaveDraft={() => saveTrade(true)}
             onCancelEdit={restoreCurrentSystemState}
             editingTrade={editingTrade}
-            scoreData={scoreData}
+            scoreData={currentScoreData}
           />
 
           <LogGenerator
             system={system}
-            scoreData={scoreData}
+            scoreData={currentScoreData}
             tradeDetails={tradeDetails}
             riskAnalysis={riskAnalysis}
             risk={risk}

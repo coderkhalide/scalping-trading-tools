@@ -19,7 +19,7 @@ export default function TradingGrader() {
   const [isLoaded, setIsLoaded] = useState(false)
   const [activeSystemId, setActiveSystemId] = useState("1")
   const [newSystemName, setNewSystemName] = useState("")
-  const [layoutMode, setLayoutMode] = useState<"auto" | "stacked" | "sideBySide">("auto")
+  const [layoutMode, setLayoutMode] = useState<"auto" | "stacked" | "sideBySide" | "fastMode">("auto")
 
   // localStorage functions
   const saveToLocalStorage = (systemsData: TradingSystem[]) => {
@@ -44,18 +44,18 @@ export default function TradingGrader() {
     return [
       {
         id: "1",
-        name: "Demo System",
-        description: "A sample trading system for demonstration purposes",
+        name: "EMT + Z-Score System",
+        description: "Primary trading system using EMT and Z-Score indicators",
         factorGroups: [
           {
             id: "1",
-            name: "15 Minute Confirmation",
+            name: "15 Minute Setup",
             operator: "OR",
             weight: 40,
             factors: [
               {
                 id: "1",
-                name: "12/21 EMA Crossover",
+                name: "EMT Green",
                 timeframe: "15m",
                 weight: 30,
                 isMandatory: false,
@@ -64,7 +64,7 @@ export default function TradingGrader() {
               },
               {
                 id: "2",
-                name: "RSI Above 50",
+                name: "Z-Score Green",
                 timeframe: "15m",
                 weight: 70,
                 isMandatory: false,
@@ -81,7 +81,7 @@ export default function TradingGrader() {
             factors: [
               {
                 id: "3",
-                name: "12/21 EMA Crossover",
+                name: "EMT Green",
                 timeframe: "1m",
                 weight: 40,
                 isMandatory: true,
@@ -90,7 +90,7 @@ export default function TradingGrader() {
               },
               {
                 id: "4",
-                name: "High Volume Spike",
+                name: "Z-Score Green",
                 timeframe: "1m",
                 weight: 60,
                 isMandatory: true,
@@ -103,12 +103,23 @@ export default function TradingGrader() {
         bonusRules: [
           {
             id: "1",
-            name: "15m Confirmation Bonus",
-            description: "RSI is above 75 on 15m chart",
+            name: "Multi-Timeframe Alignment",
+            description: "EMT Green on both 1m and 15m AND Z-Score Green on both 1m and 15m (both 75%+)",
             bonusPoints: 15,
             conditions: [
-              { factorName: "12/21 EMA Crossover", timeframes: ["1m", "15m"], minimumGrade: 75 },
-              { factorName: "RSI Above 50", timeframes: ["1m", "15m"], minimumGrade: 75 },
+              { factorName: "EMT Green", timeframes: ["1m", "15m"], minimumGrade: 75 },
+              { factorName: "Z-Score Green", timeframes: ["1m", "15m"], minimumGrade: 75 },
+            ],
+            isActive: true,
+          },
+          {
+            id: "2",
+            name: "Perfect 15m Sync",
+            description: "15m EMT and Z-Score both at 90%+ simultaneously",
+            bonusPoints: 25,
+            conditions: [
+              { factorName: "EMT Green", timeframes: ["15m"], minimumGrade: 90 },
+              { factorName: "Z-Score Green", timeframes: ["15m"], minimumGrade: 90 },
             ],
             isActive: true,
           },
@@ -138,7 +149,7 @@ export default function TradingGrader() {
   useEffect(() => {
     try {
       const savedLayout = localStorage.getItem("tradingGraderLayout")
-      if (savedLayout) setLayoutMode(savedLayout as "auto" | "stacked" | "sideBySide")
+      if (savedLayout) setLayoutMode(savedLayout as "auto" | "stacked" | "sideBySide" | "fastMode")
     } catch (error) {
       console.error("Failed to load layout preference:", error)
     }
@@ -243,9 +254,9 @@ export default function TradingGrader() {
     const updatedGroups = activeSystem.factorGroups.map((g) =>
       g.id === groupId
         ? {
-          ...g,
-          factors: g.factors.map((f) => (f.id === factorId ? { ...f, ...updates } : f)),
-        }
+            ...g,
+            factors: g.factors.map((f) => (f.id === factorId ? { ...f, ...updates } : f)),
+          }
         : g,
     )
     updateSystem({ factorGroups: updatedGroups })
@@ -365,7 +376,7 @@ export default function TradingGrader() {
             <Label className="text-sm">Layout:</Label>
             <Select
               value={layoutMode}
-              onValueChange={(value: "auto" | "stacked" | "sideBySide") => setLayoutMode(value)}
+              onValueChange={(value: "auto" | "stacked" | "sideBySide" | "fastMode") => setLayoutMode(value)}
             >
               <SelectTrigger className="w-32">
                 <SelectValue />
@@ -374,6 +385,7 @@ export default function TradingGrader() {
                 <SelectItem value="auto">Auto</SelectItem>
                 <SelectItem value="stacked">Stacked</SelectItem>
                 <SelectItem value="sideBySide">Side by Side</SelectItem>
+                <SelectItem value="fastMode">Fast Mode</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -429,62 +441,80 @@ export default function TradingGrader() {
 
       {/* Main Content */}
       {activeSystem && (
-        <div
-          className={`
-            ${layoutMode === "sideBySide"
-              ? "grid grid-cols-2 gap-6"
-              : layoutMode === "stacked"
-                ? "space-y-6"
-                : "space-y-6 2xl:grid 2xl:grid-cols-2 2xl:gap-6 2xl:space-y-0"
-            }
-          `}
-        >
-          {/* Left Column - Grading System */}
-          <div className="space-y-6">
-            <ScoreDisplay scoreData={scoreData} />
-
-            {/* Factor Groups */}
-            <div className="space-y-4">
-              {activeSystem.factorGroups.map((group) => (
-                <FactorGroupComponent
-                  key={group.id}
-                  group={group}
-                  onUpdateGroup={(updates) => updateFactorGroup(group.id, updates)}
-                  onUpdateFactor={(factorId, updates) => updateFactor(group.id, factorId, updates)}
-                  onAddFactor={() => addFactor(group.id)}
-                  onDeleteFactor={(factorId) => deleteFactor(group.id, factorId)}
-                  onDeleteGroup={() => deleteFactorGroup(group.id)}
-                />
-              ))}
-
-              <Button variant="outline" onClick={addFactorGroup} className="w-full">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Factor Group
-              </Button>
+        <>
+          {/* Fast Mode - Trade Logger and History Only */}
+          {layoutMode === "fastMode" ? (
+            <div className="space-y-6">
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center gap-2 text-yellow-800">
+                  <span className="text-lg">⚡</span>
+                  <span className="font-semibold">Fast Mode Active</span>
+                  <span className="text-sm">- Quick trade entry without factor configuration</span>
+                </div>
+              </div>
+              <TradeLogger system={activeSystem} scoreData={scoreData} onRestoreSystemState={restoreSystemState} />
             </div>
+          ) : (
+            /* Normal Layouts */
+            <div
+              className={`
+                ${
+                  layoutMode === "sideBySide"
+                    ? "grid grid-cols-2 gap-6"
+                    : layoutMode === "stacked"
+                      ? "space-y-6"
+                      : "space-y-6 2xl:grid 2xl:grid-cols-2 2xl:gap-6 2xl:space-y-0"
+                }
+              `}
+            >
+              {/* Left Column - Grading System */}
+              <div className="space-y-6">
+                <ScoreDisplay scoreData={scoreData} />
 
-            <BonusRules
-              bonusRules={activeSystem.bonusRules}
-              onUpdateRule={updateBonusRule}
-              onAddRule={addBonusRule}
-              onDeleteRule={deleteBonusRule}
-            />
+                {/* Factor Groups */}
+                <div className="space-y-4">
+                  {activeSystem.factorGroups.map((group) => (
+                    <FactorGroupComponent
+                      key={group.id}
+                      group={group}
+                      onUpdateGroup={(updates) => updateFactorGroup(group.id, updates)}
+                      onUpdateFactor={(factorId, updates) => updateFactor(group.id, factorId, updates)}
+                      onAddFactor={() => addFactor(group.id)}
+                      onDeleteFactor={(factorId) => deleteFactor(group.id, factorId)}
+                      onDeleteGroup={() => deleteFactorGroup(group.id)}
+                    />
+                  ))}
 
-            <SystemInfo
-              system={activeSystem}
-              systems={systems}
-              onUpdateSystem={updateSystem}
-              onExportSystems={handleExportSystems}
-              onImportSystems={handleImportSystems}
-              onClearData={handleClearData}
-            />
-          </div>
+                  <Button variant="outline" onClick={addFactorGroup} className="w-full bg-transparent">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Factor Group
+                  </Button>
+                </div>
 
-          {/* Right Column - Trade Logger */}
-          <div className="space-y-6">
-            <TradeLogger system={activeSystem} scoreData={scoreData} onRestoreSystemState={restoreSystemState} />
-          </div>
-        </div>
+                <BonusRules
+                  bonusRules={activeSystem.bonusRules}
+                  onUpdateRule={updateBonusRule}
+                  onAddRule={addBonusRule}
+                  onDeleteRule={deleteBonusRule}
+                />
+
+                <SystemInfo
+                  system={activeSystem}
+                  systems={systems}
+                  onUpdateSystem={updateSystem}
+                  onExportSystems={handleExportSystems}
+                  onImportSystems={handleImportSystems}
+                  onClearData={handleClearData}
+                />
+              </div>
+
+              {/* Right Column - Trade Logger */}
+              <div className="space-y-6">
+                <TradeLogger system={activeSystem} scoreData={scoreData} onRestoreSystemState={restoreSystemState} />
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
